@@ -22,19 +22,25 @@
       />
     </div>
     <!-- My Courses List -->
-    <ul id="myCoursesList" class="space-y-2">
-      <% myCourses.forEach(course => { %>
-        <li>
-          <a href="/courses/<%= course.id %>" class="text-blue-700 hover:underline font-semibold"><%= course.name %></a>
-        </li>
-      <% }) %>
-    </ul>
+    <% if (myCourses.length === 0) { %>
+      <p class="text-gray-500 italic text-center mt-4">
+        No courses found. <a href="/createnewcourse" class="text-blue-600 hover:underline">Create your first course</a> to get started!
+      </p>
+    <% } else { %>
+      <ul id="myCoursesList" class="space-y-2">
+        <% myCourses.forEach(course => { %>
+          <li>
+            <a href="/courses/<%= course.id %>" class="text-blue-700 hover:underline font-semibold"><%= course.name %></a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
     <script>
       function filterMyCourses() {
         const input = document.getElementById('myCourseSearch');
         const filter = input.value.toLowerCase();
         const courseList = document.getElementById('myCoursesList');
-        if (!courseList) return;
+        if (!courseList) return; // No list if no courses
         const items = courseList.getElementsByTagName('li');
         for (let i = 0; i < items.length; i++) {
           const txt = items[i].textContent || items[i].innerText;
