@@ -93,18 +93,56 @@ app.get("/signup", (req, res) => {
 });
 
 // Signup
-app.post("/signup", async (req, res) => {
+app.post("/signup", async (req, res, next) => {
     try {
-        const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
-        await User.create({
+        const password = req.body.password;
+        
+        // Password strength validation (OWASP guidelines)
+        const minLength = 8;
+        const hasUpperCase = /[A-Z]/.test(password);
+        const hasLowerCase = /[a-z]/.test(password);
+        const hasNumber = /[0-9]/.test(password);
+        const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+        
+        if (password.length < minLength) {
+            req.flash("error", `Password must be at least ${minLength} characters long.`);
+            return res.redirect("/signup");
+        }
+        if (!hasUpperCase) {
+            req.flash("error", "Password must contain at least one uppercase letter.");
+            return res.redirect("/signup");
+        }
+        if (!hasLowerCase) {
+            req.flash("error", "Password must contain at least one lowercase letter.");
+            return res.redirect("/signup");
+        }
+        if (!hasNumber) {
+            req.flash("error", "Password must contain at least one number.");
+            return res.redirect("/signup");
+        }
+        if (!hasSpecialChar) {
+            req.flash("error", "Password must contain at least one special character (!@#$%^&* etc.).");
+            return res.redirect("/signup");
+        }
+        
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const user = await User.create({
             firstName: req.body.firstName,
             lastName: req.body.lastName,
             email: req.body.email,
             role: req.body.role,
             password: hashedPassword,
         });
-        req.flash("success", "Account created! Please sign in.");
-        res.redirect("/signin");
+        
+        // Auto-login the user after successful signup
+        req.login(user, (err) => {
+            if (err) {
+                req.flash("error", "Account created but login failed. Please sign in manually.");
+                return res.redirect("/signin");
+            }
+            req.flash("success", "Account created successfully! Welcome to the LMS.");
+            res.redirect("/dashboard");
+        });
     } catch (error) {
         req.flash("error", "User creation failed. Check input and try again.");
         res.redirect("/signup");
@@ -186,16 +224,33 @@ app.get("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePub
 app.post("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
     try {
         const course = await Courses.findOne({ where: { name: req.body.courseName } });
-        if (!course) throw new Error("Course not found");
+        if (!course) {
+            req.flash("error", "Course not found. Please select a valid course.");
+            return res.redirect("/addchapters");
+        }
+        
+        // Validate description length
+        if (req.body.description && req.body.description.length > 1000) {
+            req.flash("error", "Chapter description is too long. Please keep it under 1000 characters.");
+            return res.redirect("/addchapters");
+        }
+        
         await Chapters.create({
             name: req.body.chapterName,
             description: req.body.description,
             courseId: course.id,
         });
         req.flash("success", "Chapter created successfully.");
-        res.redirect(`/addpages?courseId=${course.id}`);
+        res.redirect(`/courses/${course.id}`);
     } catch (error) {
-        req.flash("error", "Chapter creation failed.");
+        console.error("Chapter creation error:", error);
+        if (error.name === 'SequelizeValidationError') {
+            req.flash("error", `Validation error: ${error.errors.map(e => e.message).join(', ')}`);
+        } else if (error.name === 'SequelizeDatabaseError') {
+            req.flash("error", "Database error: Please check your input and try again.");
+        } else {
+            req.flash("error", `Chapter creation failed: ${error.message}`);
+        }
         res.redirect("/addchapters");
     }
 });
@@ -234,7 +289,7 @@ app.post("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePubli
             chapterId: chapterId,
         });
         req.flash("success", "Page created successfully.");
-        return res.redirect(`/mycourses`);
+        return res.redirect(`/courses/${courseId}`);
     } catch (error) {
         req.flash("error", "Page creation failed.");
         return res.redirect(`/addpages?courseId=${req.body.courseId || ''}`);
@@ -255,6 +310,35 @@ app.post('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), async
         req.flash('error', 'Old password incorrect');
         return res.redirect('/update-password');
     }
+    
+    // Password strength validation (OWASP guidelines)
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
+    
+    if (newPassword.length < minLength) {
+        req.flash("error", `Password must be at least ${minLength} characters long.`);
+        return res.redirect("/update-password");
+    }
+    if (!hasUpperCase) {
+        req.flash("error", "Password must contain at least one uppercase letter.");
+        return res.redirect("/update-password");
+    }
+    if (!hasLowerCase) {
+        req.flash("error", "Password must contain at least one lowercase letter.");
+        return res.redirect("/update-password");
+    }
+    if (!hasNumber) {
+        req.flash("error", "Password must contain at least one number.");
+        return res.redirect("/update-password");
+    }
+    if (!hasSpecialChar) {
+        req.flash("error", "Password must contain at least one special character (!@#$%^&* etc.).");
+        return res.redirect("/update-password");
+    }
+    
     user.password = await bcrypt.hash(newPassword, saltRounds);
     await user.save();
     req.flash('success', 'Password updated');
