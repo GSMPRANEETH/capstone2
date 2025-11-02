@@ -51,6 +51,12 @@ async function getAvailableCourses(userId) {
         attributes: ['courseId']
     });
     const enrolledCourseIds = enrolledRows.map(row => row.courseId);
+    
+    // If no enrollments, return all courses
+    if (enrolledCourseIds.length === 0) {
+        return await Courses.findAll();
+    }
+    
     return await Courses.findAll({
         where: { id: { [Op.notIn]: enrolledCourseIds } }
     });
