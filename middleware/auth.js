@@ -10,7 +10,8 @@ function requireEducator(req, res, next) {
     if (req.user && req.user.role === 'educator') {
         return next();
     }
-    return res.status(401).json({ message: 'Unauthorized. Educator access required.' });
+    req.flash('error', 'Unauthorized. Educator access required.');
+    return res.redirect('/dashboard');
 }
 
 // Middleware to restrict student-only access
@@ -18,7 +19,8 @@ function requireStudent(req, res, next) {
     if (req.user && req.user.role === 'student') {
         return next();
     }
-    return res.status(401).json({ message: 'Unauthorized. Student access required.' });
+    req.flash('error', 'Unauthorized. Student access required.');
+    return res.redirect('/dashboard');
 }
 
 // Middleware to check if user is enrolled in a course

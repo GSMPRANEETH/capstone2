@@ -1,5 +1,6 @@
 // Helper functions for common database queries
 
+const { Op } = require('sequelize');
 const { Courses, Chapters, Pages, Enrollments, Completions, QuizQuestion, QuizAttempt } = require("../models");
 
 /**
@@ -45,7 +46,6 @@ async function getEnrolledCourses(userId) {
  * @returns {Promise<Array>} - Array of courses
  */
 async function getAvailableCourses(userId) {
-    const { Op } = require('sequelize');
     const enrolledRows = await Enrollments.findAll({
         where: { userId },
         attributes: ['courseId']
