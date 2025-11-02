@@ -10,10 +10,12 @@ const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
 const bcrypt = require("bcrypt");
 const csrf = require("csurf");
-const connectEnsureLogin = require("connect-ensure-login");
 const { Op } = require('sequelize');
 
 const { User, Courses, Chapters, Pages, Enrollments, Completions, QuizQuestion, QuizAttempt } = require("./models");
+const { ensureLoggedIn, requireEducator } = require("./middleware/auth");
+const { validatePasswordStrength } = require("./helpers/passwordValidator");
+const { getEnrolledCourses, getAvailableCourses, getCoursesByCreator, getChaptersByCourse } = require("./helpers/dbHelpers");
 const saltRounds = 10;
 
 // 📦 Middleware setup
@@ -76,12 +78,6 @@ passport.deserializeUser(async (id, done) => {
     catch (err) { done(err); }
 });
 
-// 🔐 Middleware to restrict publisher-only access
-function requirePublisher(req, res, next) {
-    if (req.user && req.user.role === 'educator') return next();
-    return res.status(401).json({ message: 'Unauthorized user.' });
-}
-
 // 🛣️ Routes
 app.get("/", (req, res) => {
     if (req.isAuthenticated && req.isAuthenticated()) return res.redirect("/dashboard");
@@ -97,31 +93,10 @@ app.post("/signup", async (req, res, next) => {
     try {
         const password = req.body.password;
         
-        // Password strength validation (OWASP guidelines)
-        const minLength = 8;
-        const hasUpperCase = /[A-Z]/.test(password);
-        const hasLowerCase = /[a-z]/.test(password);
-        const hasNumber = /[0-9]/.test(password);
-        const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-        
-        if (password.length < minLength) {
-            req.flash("error", `Password must be at least ${minLength} characters long.`);
-            return res.redirect("/signup");
-        }
-        if (!hasUpperCase) {
-            req.flash("error", "Password must contain at least one uppercase letter.");
-            return res.redirect("/signup");
-        }
-        if (!hasLowerCase) {
-            req.flash("error", "Password must contain at least one lowercase letter.");
-            return res.redirect("/signup");
-        }
-        if (!hasNumber) {
-            req.flash("error", "Password must contain at least one number.");
-            return res.redirect("/signup");
-        }
-        if (!hasSpecialChar) {
-            req.flash("error", "Password must contain at least one special character (!@#$%^&* etc.).");
+        // Password strength validation using helper
+        const validation = validatePasswordStrength(password);
+        if (!validation.valid) {
+            validation.errors.forEach(error => req.flash("error", error));
             return res.redirect("/signup");
         }
         
@@ -163,17 +138,10 @@ app.post(
     })
 );
 
-app.get("/dashboard", connectEnsureLogin.ensureLoggedIn("/signin"), async (req, res) => {
+app.get("/dashboard", ensureLoggedIn, async (req, res) => {
     try {
-        const enrolledRows = await Enrollments.findAll({
-            where: { userId: req.user.id },
-            attributes: ['courseId']
-        });
-        const enrolledCourseIds = enrolledRows.map(row => row.courseId);
-        const enrolledCourses = await Courses.findAll({ where: { id: enrolledCourseIds } });
-        const availableCourses = await Courses.findAll({
-            where: { id: { [Op.notIn]: enrolledCourseIds } }
-        });
+        const enrolledCourses = await getEnrolledCourses(req.user.id);
+        const availableCourses = await getAvailableCourses(req.user.id);
         res.render("dashboard", {
             user: req.user,
             csrfToken: req.csrfToken(),
@@ -197,12 +165,12 @@ app.get("/signout", (req, res, next) => {
     });
 });
 
-app.get("/createnewcourse", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, (req, res) => {
+app.get("/createnewcourse", ensureLoggedIn, requireEducator, (req, res) => {
     res.render("addcourse", { user: req.user, csrfToken: req.csrfToken() });
 });
 
 // Create course
-app.post("/createnewcourse", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
+app.post("/createnewcourse", ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const course = await Courses.create({
             name: req.body.name,
@@ -216,12 +184,12 @@ app.post("/createnewcourse", connectEnsureLogin.ensureLoggedIn("/signin"), requi
     }
 });
 
-app.get("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
-    let myCourses = await getCourse(req);
+app.get("/addchapters", ensureLoggedIn, requireEducator, async (req, res) => {
+    let myCourses = await getCoursesByCreator(req.user.id);
     res.render("addchapters", { myCourses: myCourses, user: req.user, csrfToken: req.csrfToken() });
 });
 
-app.post("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
+app.post("/addchapters", ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const course = await Courses.findOne({ where: { name: req.body.courseName } });
         if (!course) {
@@ -255,7 +223,7 @@ app.post("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePu
     }
 });
 
-app.get("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
+app.get("/addpages", ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const courseId = req.query.courseId;
         const myChapters = await Chapters.findAll({
@@ -274,7 +242,7 @@ app.get("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublis
     }
 });
 
-app.post("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePublisher, async (req, res) => {
+app.post("/addpages", ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const courseId = req.body.courseId;
         const chapterId = req.body.chapterId;
@@ -297,12 +265,12 @@ app.post("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePubli
 });
 
 // Show update password form
-app.get('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), (req, res) => {
+app.get('/update-password', ensureLoggedIn, (req, res) => {
     res.render('update-password', { csrfToken: req.csrfToken(), user: req.user });
 });
 
 // Handle update password form submission
-app.post('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.post('/update-password', ensureLoggedIn, async (req, res) => {
     const { oldPassword, newPassword } = req.body;
     const user = await User.findByPk(req.user.id);
     const valid = await bcrypt.compare(oldPassword, user.password);
@@ -311,31 +279,10 @@ app.post('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), async
         return res.redirect('/update-password');
     }
     
-    // Password strength validation (OWASP guidelines)
-    const minLength = 8;
-    const hasUpperCase = /[A-Z]/.test(newPassword);
-    const hasLowerCase = /[a-z]/.test(newPassword);
-    const hasNumber = /[0-9]/.test(newPassword);
-    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
-    
-    if (newPassword.length < minLength) {
-        req.flash("error", `Password must be at least ${minLength} characters long.`);
-        return res.redirect("/update-password");
-    }
-    if (!hasUpperCase) {
-        req.flash("error", "Password must contain at least one uppercase letter.");
-        return res.redirect("/update-password");
-    }
-    if (!hasLowerCase) {
-        req.flash("error", "Password must contain at least one lowercase letter.");
-        return res.redirect("/update-password");
-    }
-    if (!hasNumber) {
-        req.flash("error", "Password must contain at least one number.");
-        return res.redirect("/update-password");
-    }
-    if (!hasSpecialChar) {
-        req.flash("error", "Password must contain at least one special character (!@#$%^&* etc.).");
+    // Password strength validation using helper
+    const validation = validatePasswordStrength(newPassword);
+    if (!validation.valid) {
+        validation.errors.forEach(error => req.flash("error", error));
         return res.redirect("/update-password");
     }
     
@@ -346,7 +293,7 @@ app.post('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), async
 });
 
 // Enroll in a course
-app.post('/enroll/:courseId', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.post('/enroll/:courseId', ensureLoggedIn, async (req, res) => {
     try {
         // Prevent duplicate enrollments
         const [enrollment, created] = await Enrollments.findOrCreate({
@@ -365,7 +312,7 @@ app.post('/enroll/:courseId', connectEnsureLogin.ensureLoggedIn('/signin'), asyn
 });
 
 // Show a specific page
-app.get('/pages/:pageId', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
     try {
         const page = await Pages.findByPk(req.params.pageId, {
             include: [{ model: Chapters }]
@@ -407,7 +354,7 @@ app.get('/pages/:pageId', connectEnsureLogin.ensureLoggedIn('/signin'), async (r
 });
 
 // Mark page as complete
-app.post('/pages/:pageId/complete', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.post('/pages/:pageId/complete', ensureLoggedIn, async (req, res) => {
     try {
         const pageId = req.params.pageId;
         const userId = req.user.id;
@@ -421,7 +368,7 @@ app.post('/pages/:pageId/complete', connectEnsureLogin.ensureLoggedIn('/signin')
 });
 
 // Edit course form
-app.get('/courses/:courseId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/courses/:courseId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const course = await Courses.findByPk(req.params.courseId);
     if (!course || course.creatorId !== req.user.id) {
         req.flash('error', 'Unauthorized');
@@ -431,7 +378,7 @@ app.get('/courses/:courseId/edit', connectEnsureLogin.ensureLoggedIn('/signin'),
 });
 
 // Edit course
-app.post('/courses/:courseId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/courses/:courseId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const course = await Courses.findByPk(req.params.courseId);
     if (!course || course.creatorId !== req.user.id) {
         req.flash('error', 'Unauthorized');
@@ -444,7 +391,7 @@ app.post('/courses/:courseId/edit', connectEnsureLogin.ensureLoggedIn('/signin')
 });
 
 // Delete course
-app.post('/courses/:courseId/delete', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/courses/:courseId/delete', ensureLoggedIn, requireEducator, async (req, res) => {
     const course = await Courses.findByPk(req.params.courseId);
     if (!course || course.creatorId !== req.user.id) {
         req.flash('error', 'Unauthorized');
@@ -458,7 +405,7 @@ app.post('/courses/:courseId/delete', connectEnsureLogin.ensureLoggedIn('/signin
 // Add chapter (already exists as POST /addchapters)
 
 // Edit chapter form
-app.get('/chapters/:chapterId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/chapters/:chapterId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const chapter = await Chapters.findByPk(req.params.chapterId);
     const course = await Courses.findByPk(chapter.courseId);
     if (!chapter || course.creatorId !== req.user.id) {
@@ -469,7 +416,7 @@ app.get('/chapters/:chapterId/edit', connectEnsureLogin.ensureLoggedIn('/signin'
 });
 
 // Handle edit chapter
-app.post('/chapters/:chapterId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/chapters/:chapterId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const chapter = await Chapters.findByPk(req.params.chapterId);
     const course = await Courses.findByPk(chapter.courseId);
     if (!chapter || course.creatorId !== req.user.id) {
@@ -484,7 +431,7 @@ app.post('/chapters/:chapterId/edit', connectEnsureLogin.ensureLoggedIn('/signin
 });
 
 // Delete chapter
-app.post('/chapters/:chapterId/delete', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/chapters/:chapterId/delete', ensureLoggedIn, requireEducator, async (req, res) => {
     const chapter = await Chapters.findByPk(req.params.chapterId);
     const course = await Courses.findByPk(chapter.courseId);
     if (!chapter || course.creatorId !== req.user.id) {
@@ -499,7 +446,7 @@ app.post('/chapters/:chapterId/delete', connectEnsureLogin.ensureLoggedIn('/sign
 // Add page (already exists as POST /addpages)
 
 // Edit page form
-app.get('/pages/:pageId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/pages/:pageId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const page = await Pages.findByPk(req.params.pageId, { include: [{ model: Chapters }] });
     const chapter = page.Chapter;
     const course = await Courses.findByPk(chapter.courseId);
@@ -511,7 +458,7 @@ app.get('/pages/:pageId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), req
 });
 
 // Handle edit page
-app.post('/pages/:pageId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/pages/:pageId/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const page = await Pages.findByPk(req.params.pageId, { include: [{ model: Chapters }] });
     const chapter = page.Chapter;
     const course = await Courses.findByPk(chapter.courseId);
@@ -527,7 +474,7 @@ app.post('/pages/:pageId/edit', connectEnsureLogin.ensureLoggedIn('/signin'), re
 });
 
 // Delete page
-app.post('/pages/:pageId/delete', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/pages/:pageId/delete', ensureLoggedIn, requireEducator, async (req, res) => {
     const page = await Pages.findByPk(req.params.pageId, { include: [{ model: Chapters }] });
     const chapter = page.Chapter;
     const course = await Courses.findByPk(chapter.courseId);
@@ -541,12 +488,12 @@ app.post('/pages/:pageId/delete', connectEnsureLogin.ensureLoggedIn('/signin'), 
 });
 
 // Show add quiz question form
-app.get('/chapters/:chapterId/quiz/add', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, async (req, res) => {
     res.render('addquizquestion', { chapterId: req.params.chapterId, csrfToken: req.csrfToken(), user: req.user });
 });
 
 // Handle add quiz question
-app.post('/chapters/:chapterId/quiz/add', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, async (req, res) => {
     await QuizQuestion.create({
         chapterId: req.params.chapterId,
         question: req.body.question,
@@ -557,7 +504,7 @@ app.post('/chapters/:chapterId/quiz/add', connectEnsureLogin.ensureLoggedIn('/si
 });
 
 // (Optional) Delete quiz question
-app.post('/quizquestion/:id/delete', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.post('/quizquestion/:id/delete', ensureLoggedIn, requireEducator, async (req, res) => {
     const qq = await QuizQuestion.findByPk(req.params.id);
     if (qq) await qq.destroy();
     req.flash('success', 'Quiz question deleted!');
@@ -565,7 +512,7 @@ app.post('/quizquestion/:id/delete', connectEnsureLogin.ensureLoggedIn('/signin'
 });
 
 // Quiz route
-app.get('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
     const chapterId = req.params.chapterId;
     const questions = await QuizQuestion.findAll({ where: { chapterId } });
     let courseId;
@@ -599,7 +546,7 @@ app.get('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin'
 });
 
 // Handle quiz submission
-app.post('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin'), async (req, res) => {
+app.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
     const chapterId = req.params.chapterId;
     const userId = req.user.id;
     const questions = await QuizQuestion.findAll({ where: { chapterId } });
@@ -655,29 +602,19 @@ app.post('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin
 });
 
 // Edit quiz page (list, add, delete questions)
-app.get('/chapters/:chapterId/quiz/edit', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/chapters/:chapterId/quiz/edit', ensureLoggedIn, requireEducator, async (req, res) => {
     const questions = await QuizQuestion.findAll({ where: { chapterId: req.params.chapterId } });
     res.render('editquiz', { questions, chapterId: req.params.chapterId, courseId: (await Chapters.findByPk(req.params.chapterId)).courseId, csrfToken: req.csrfToken(), user: req.user });
 });
 
 // 📦 Helper functions
-async function getCourse(req) {
-    return await Courses.findAll({ where: { creatorId: req.user.id } });
-}
-
-async function getChapters(req, cId) {
-    const courseId = cId || req.query.courseId;
-    if (!courseId) throw new Error("Missing courseId in query");
-    return await Chapters.findAll({ where: { courseId } });
-}
-
-app.get("/mycourses", connectEnsureLogin.ensureLoggedIn("/signin"), async (req, res) => {
-    let myCourses = await getCourse(req);
+app.get("/mycourses", ensureLoggedIn, async (req, res) => {
+    let myCourses = await getCoursesByCreator(req.user.id);
     res.render("mycourses", { user: req.user, csrfToken: req.csrfToken(), myCourses: myCourses });
 });
 
 // Route to view a specific course and its chapters
-app.get("/courses/:courseId", connectEnsureLogin.ensureLoggedIn("/signin"), async (req, res) => {
+app.get("/courses/:courseId", ensureLoggedIn, async (req, res) => {
     const courseId = req.params.courseId;
     const course = await Courses.findByPk(courseId);
     if (!course) return res.status(404).send("Course not found");
@@ -763,7 +700,7 @@ app.get("/courses/:courseId", connectEnsureLogin.ensureLoggedIn("/signin"), asyn
 
 
 // Reports
-app.get('/reports', connectEnsureLogin.ensureLoggedIn('/signin'), requirePublisher, async (req, res) => {
+app.get('/reports', ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const courses = await Courses.findAll({ where: { creatorId: req.user.id } });
         const reports = await Promise.all(
