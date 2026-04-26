@@ -23,6 +23,9 @@
     </div>
     <!-- My Courses List -->
     <ul id="myCoursesList" class="space-y-2">
+      <% if (myCourses.length === 0) { %>
+        <li id="noCoursesMsg" class="text-gray-500 italic">No courses found. <a href="/createnewcourse" class="text-blue-600 hover:underline">Create your first course</a>.</li>
+      <% } %>
       <% myCourses.forEach(course => { %>
         <li>
           <a href="/courses/<%= course.id %>" class="text-blue-700 hover:underline font-semibold"><%= course.name %></a>
@@ -36,10 +39,16 @@
         const courseList = document.getElementById('myCoursesList');
         if (!courseList) return;
         const items = courseList.getElementsByTagName('li');
+        let visibleCount = 0;
         for (let i = 0; i < items.length; i++) {
+          if (items[i].id === 'noCoursesMsg') continue;
           const txt = items[i].textContent || items[i].innerText;
-          items[i].style.display = txt.toLowerCase().includes(filter) ? "" : "none";
+          const show = txt.toLowerCase().includes(filter);
+          items[i].style.display = show ? "" : "none";
+          if (show) visibleCount++;
         }
+        const noMsg = document.getElementById('noCoursesMsg');
+        if (noMsg) noMsg.style.display = (visibleCount === 0 && filter) ? "" : "none";
       }
     </script>
   </div>

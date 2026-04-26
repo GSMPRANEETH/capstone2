@@ -10,18 +10,45 @@
 <body class="bg-gradient-to-br from-blue-50 to-blue-100 min-h-screen flex flex-col items-center">
   <div class="w-full max-w-lg mt-10 bg-white rounded-lg shadow-lg p-8">
     <%- include('notifications.ejs') %>
+
+    <!-- Breadcrumb -->
+    <nav class="text-sm text-gray-500 mb-4" aria-label="breadcrumb">
+      <a href="/dashboard" class="hover:underline text-blue-600">Dashboard</a>
+      <span class="mx-1">/</span>
+      <a href="/courses/<%= course.id %>" class="hover:underline text-blue-600"><%= course.name %></a>
+      <span class="mx-1">/</span>
+      <span class="text-gray-400"><%= chapter ? chapter.name : '' %></span>
+      <span class="mx-1">/</span>
+      <span class="text-gray-700 font-medium"><%= page.title %></span>
+    </nav>
+
     <h1 class="text-2xl font-bold mb-4 text-blue-800"><%= page.title %></h1>
-    <p class="mb-2 text-gray-600">Chapter: <%= chapter ? chapter.name : '' %></p>
     <div class="mb-6 text-gray-800 whitespace-pre-line"><%= page.content %></div>
-    
+
     <% if (user.role === 'student' && !isCompleted) { %>
       <form action="/pages/<%= page.id %>/complete" method="POST" class="mt-4">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Mark as Complete</button>
       </form>
     <% } else if (user.role === 'student' && isCompleted) { %>
-      <p class="mt-4 text-green-700 font-semibold">Completed!</p>
+      <p class="mt-4 text-green-700 font-semibold">✔ Completed!</p>
     <% } %>
+
+    <!-- Prev / Next navigation -->
+    <div class="flex justify-between mt-8">
+      <% if (prevPage) { %>
+        <a href="/pages/<%= prevPage.id %>" class="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 font-medium">
+          ← <%= prevPage.title %>
+        </a>
+      <% } else { %>
+        <span></span>
+      <% } %>
+      <% if (nextPage) { %>
+        <a href="/pages/<%= nextPage.id %>" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium">
+          <%= nextPage.title %> →
+        </a>
+      <% } %>
+    </div>
   </div>
 </body>
 </html>

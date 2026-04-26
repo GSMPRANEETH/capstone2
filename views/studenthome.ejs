@@ -1,5 +1,8 @@
 <div class="mb-6">
   <p class="text-lg font-semibold text-gray-700 mb-2">Enrolled courses:</p>
+  <% if (enrolledCourses.length === 0) { %>
+    <p class="text-gray-500 italic">No enrolled courses found. Browse available courses below.</p>
+  <% } else { %>
   <ul class="list-disc list-inside space-y-1">
     <% for (let course of enrolledCourses) { %>
       <li class="text-gray-800">
@@ -7,6 +10,7 @@
       </li>
     <% } %>
   </ul>
+  <% } %>
 
   <p class="text-lg font-semibold text-gray-700 mb-2 mt-6">Available courses:</p>
 
@@ -17,6 +21,9 @@
 
   <!-- ✅ Only one list -->
   <ul id="availableCoursesList" class="space-y-2">
+    <% if (availableCourses.length === 0) { %>
+      <li id="noCoursesMsg" class="text-gray-500 italic">No courses available to enroll in.</li>
+    <% } %>
     <% availableCourses.forEach(course => { %>
       <li>
         <a href="/courses/<%= course.id %>" class="text-blue-700 hover:underline font-semibold">
@@ -32,11 +39,18 @@
       const filter = input.value.toLowerCase();
       const courseList = document.getElementById('availableCoursesList');
       const items = courseList.getElementsByTagName('li');
+      let visibleCount = 0;
 
       for (let i = 0; i < items.length; i++) {
+        if (items[i].id === 'noCoursesMsg') continue;
         const txt = items[i].textContent || items[i].innerText;
-        items[i].style.display = txt.toLowerCase().includes(filter) ? "" : "none";
+        const show = txt.toLowerCase().includes(filter);
+        items[i].style.display = show ? "" : "none";
+        if (show) visibleCount++;
       }
+
+      const noMsg = document.getElementById('noCoursesMsg');
+      if (noMsg) noMsg.style.display = (visibleCount === 0 && filter) ? "" : "none";
     }
   </script>
 </div>

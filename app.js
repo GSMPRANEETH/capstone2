@@ -16,6 +16,27 @@ const { Op } = require('sequelize');
 const { User, Courses, Chapters, Pages, Enrollments, Completions, QuizQuestion, QuizAttempt } = require("./models");
 const saltRounds = 10;
 
+// 🔒 OWASP password strength validation
+function validatePassword(password) {
+    const errors = [];
+    if (!password || password.length < 8) {
+        errors.push("Password must be at least 8 characters long.");
+    }
+    if (!/[A-Z]/.test(password)) {
+        errors.push("Password must contain at least one uppercase letter.");
+    }
+    if (!/[a-z]/.test(password)) {
+        errors.push("Password must contain at least one lowercase letter.");
+    }
+    if (!/[0-9]/.test(password)) {
+        errors.push("Password must contain at least one digit.");
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+        errors.push("Password must contain at least one special character.");
+    }
+    return errors;
+}
+
 // 📦 Middleware setup
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -95,16 +116,31 @@ app.get("/signup", (req, res) => {
 // Signup
 app.post("/signup", async (req, res) => {
     try {
-        const hashedPassword = await bcrypt.hash(req.body.password, saltRounds);
-        await User.create({
+        // OWASP password strength validation
+        const password = req.body.password;
+        const passwordErrors = validatePassword(password);
+        if (passwordErrors.length > 0) {
+            req.flash("error", passwordErrors.join(" "));
+            return res.redirect("/signup");
+        }
+
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const user = await User.create({
             firstName: req.body.firstName,
             lastName: req.body.lastName,
             email: req.body.email,
             role: req.body.role,
             password: hashedPassword,
         });
-        req.flash("success", "Account created! Please sign in.");
-        res.redirect("/signin");
+        // Auto-login after signup
+        req.login(user, (err) => {
+            if (err) {
+                req.flash("error", "Account created but login failed. Please sign in.");
+                return res.redirect("/signin");
+            }
+            req.flash("success", "Account created successfully! Welcome.");
+            return res.redirect("/dashboard");
+        });
     } catch (error) {
         req.flash("error", "User creation failed. Check input and try again.");
         res.redirect("/signup");
@@ -193,7 +229,7 @@ app.post("/addchapters", connectEnsureLogin.ensureLoggedIn("/signin"), requirePu
             courseId: course.id,
         });
         req.flash("success", "Chapter created successfully.");
-        res.redirect(`/addpages?courseId=${course.id}`);
+        res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash("error", "Chapter creation failed.");
         res.redirect("/addchapters");
@@ -234,7 +270,7 @@ app.post("/addpages", connectEnsureLogin.ensureLoggedIn("/signin"), requirePubli
             chapterId: chapterId,
         });
         req.flash("success", "Page created successfully.");
-        return res.redirect(`/mycourses`);
+        return res.redirect(`/courses/${courseId}`);
     } catch (error) {
         req.flash("error", "Page creation failed.");
         return res.redirect(`/addpages?courseId=${req.body.courseId || ''}`);
@@ -308,12 +344,23 @@ app.get('/pages/:pageId', connectEnsureLogin.ensureLoggedIn('/signin'), async (r
             return res.redirect('/dashboard');
         }
 
+        // Fetch all pages in the chapter for prev/next navigation
+        const chapterPages = await Pages.findAll({
+            where: { chapterId: chapter.id },
+            order: [['id', 'ASC']]
+        });
+        const pageIndex = chapterPages.findIndex(p => p.id === page.id);
+        const prevPage = pageIndex > 0 ? chapterPages[pageIndex - 1] : null;
+        const nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
+
         res.render('page', {
             user: req.user,
             csrfToken: req.csrfToken(),
             page,
             chapter,
             course,
+            prevPage,
+            nextPage,
             isCompleted: !!await Completions.findOne({ where: { userId: req.user.id, pageId: page.id } })
         });
     } catch (error) {
@@ -500,8 +547,12 @@ app.get('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin'
     courseId = chapter.courseId;
     const attempt = await QuizAttempt.findOne({ where: { userId: req.user.id, chapterId } });
     let showAnswers = false;
-    if (attempt && (attempt.attempts >= 3 || attempt.score === attempt.total)) {
-        showAnswers = true;
+    let passed = false;
+    if (attempt) {
+        passed = attempt.score !== null && attempt.score === attempt.total;
+        if (attempt.attempts >= 3 || passed) {
+            showAnswers = true;
+        }
     }
     res.render('quiz', {
         questions,
@@ -510,7 +561,8 @@ app.get('/chapters/:chapterId/quiz', connectEnsureLogin.ensureLoggedIn('/signin'
         csrfToken: req.csrfToken(),
         user: req.user,
         attempt,
-        showAnswers
+        showAnswers,
+        passed
     });
 });
 

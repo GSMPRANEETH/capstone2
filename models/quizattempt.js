@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
     total: DataTypes.INTEGER,
     attempts: {
       type: DataTypes.INTEGER,
-      defaultValue: 3
+      defaultValue: 0
     }
   }, {
     sequelize,
