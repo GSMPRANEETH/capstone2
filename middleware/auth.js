@@ -16,7 +16,7 @@ function requireEducator(req, res, next) {
  */
 async function requireCourseOwner(req, res, next) {
     try {
-        const courseId = req.params.courseId || req.course && req.course.id;
+        const courseId = req.params.courseId || req.course?.id;
         const course = await Courses.findByPk(courseId);
         if (!course || course.creatorId !== req.user.id) {
             req.flash('error', 'Unauthorized');

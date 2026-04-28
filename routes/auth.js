@@ -5,11 +5,22 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const passport = require('passport');
 const connectEnsureLogin = require('connect-ensure-login');
+const rateLimit = require('express-rate-limit');
 const { User, Courses, Enrollments } = require('../models');
 const { Op } = require('sequelize');
 const { validatePassword } = require('../middleware/auth');
 
 const saltRounds = 10;
+
+// Rate limiter for authentication endpoints (signup and signin)
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many attempts from this IP, please try again after 15 minutes.',
+    skip: () => process.env.NODE_ENV === 'test',
+});
 
 // Home
 router.get('/', (req, res) => {
@@ -23,7 +34,7 @@ router.get('/signup', (req, res) => {
 });
 
 // Signup submit
-router.post('/signup', async (req, res) => {
+router.post('/signup', authLimiter, async (req, res) => {
     try {
         const password = req.body.password;
         const passwordErrors = validatePassword(password);
@@ -63,6 +74,7 @@ router.get('/signin', (req, res) => {
 // Signin submit
 router.post(
     '/signin',
+    authLimiter,
     passport.authenticate('local', {
         successRedirect: '/dashboard',
         failureRedirect: '/signin',

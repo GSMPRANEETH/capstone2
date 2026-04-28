@@ -20,10 +20,16 @@ async function getEducatorCourses(userId) {
  */
 async function loadChapterForEducator(chapterId, userId) {
     const chapter = await Chapters.findByPk(chapterId);
-    if (!chapter) throw Object.assign(new Error('Chapter not found'), { status: 404 });
+    if (!chapter) {
+        const err = new Error('Chapter not found');
+        err.status = 404;
+        throw err;
+    }
     const course = await Courses.findByPk(chapter.courseId);
     if (!course || course.creatorId !== userId) {
-        throw Object.assign(new Error('Unauthorized'), { status: 403 });
+        const err = new Error('Unauthorized');
+        err.status = 403;
+        throw err;
     }
     return { chapter, course };
 }
@@ -34,11 +40,17 @@ async function loadChapterForEducator(chapterId, userId) {
  */
 async function loadPageForEducator(pageId, userId) {
     const page = await Pages.findByPk(pageId, { include: [{ model: Chapters }] });
-    if (!page) throw Object.assign(new Error('Page not found'), { status: 404 });
+    if (!page) {
+        const err = new Error('Page not found');
+        err.status = 404;
+        throw err;
+    }
     const chapter = page.Chapter;
     const course = await Courses.findByPk(chapter.courseId);
     if (!course || course.creatorId !== userId) {
-        throw Object.assign(new Error('Unauthorized'), { status: 403 });
+        const err = new Error('Unauthorized');
+        err.status = 403;
+        throw err;
     }
     return { page, chapter, course };
 }
