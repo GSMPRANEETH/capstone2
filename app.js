@@ -32,10 +32,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser(process.env.COOKIE_SECRET));
-app.use(csrf({ cookie: true }));
+app.use(csrf({ cookie: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' } }));
 
 // ─── Session ─────────────────────────────────────────────────────────────────
 
+app.set('trust proxy', 1);
 app.use(
     session({
         secret: process.env.COOKIE_SECRET,
