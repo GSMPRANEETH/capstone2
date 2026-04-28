@@ -42,6 +42,9 @@
     </div>
 
     <p class="text-lg font-semibold text-gray-700 mb-2">Chapters:</p>
+    <% if (myChapters.length === 0) { %>
+      <p class="text-gray-500 italic">No chapters found.<% if (isEducator) { %> <a href="/addchapters?courseId=<%= course.id %>" class="text-blue-600 hover:underline">Add the first chapter</a>.<% } %></p>
+    <% } %>
     <ul class="space-y-4">
   <% for (let chapter of myChapters) { %>
     <li class="group bg-white rounded-md px-4 py-3 shadow-sm border border-gray-200">
