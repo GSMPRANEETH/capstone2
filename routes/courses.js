@@ -75,10 +75,10 @@ router.post('/createnewcourse', ensureLoggedIn, requireEducator, async (req, res
             creatorId: req.user.id,
         });
         req.flash('success', 'Course created successfully.');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', 'Course creation failed. Check input and try again.');
-        res.redirect('/createnewcourse');
+        return res.redirect('/createnewcourse');
     }
 });
 
@@ -152,7 +152,7 @@ router.get('/courses/:courseId', ensureLoggedIn, async (req, res) => {
         });
     } catch (error) {
         req.flash('error', 'Could not load course.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -176,7 +176,7 @@ router.post('/courses/:courseId/edit', ensureLoggedIn, requireEducator, async (r
     course.name = req.body.name;
     await course.save();
     req.flash('success', 'Course updated!');
-    res.redirect(`/courses/${course.id}`);
+    return res.redirect(`/courses/${course.id}`);
 });
 
 router.post('/courses/:courseId/delete', ensureLoggedIn, requireEducator, async (req, res) => {
@@ -187,7 +187,7 @@ router.post('/courses/:courseId/delete', ensureLoggedIn, requireEducator, async 
     }
     await course.destroy();
     req.flash('success', 'Course deleted!');
-    res.redirect('/dashboard');
+    return res.redirect('/dashboard');
 });
 
 // ─── Chapters ────────────────────────────────────────────────────────────────
@@ -207,10 +207,10 @@ router.post('/addchapters', ensureLoggedIn, requireEducator, async (req, res) =>
             courseId: course.id,
         });
         req.flash('success', 'Chapter created successfully.');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', 'Chapter creation failed.');
-        res.redirect('/addchapters');
+        return res.redirect('/addchapters');
     }
 });
 
@@ -220,7 +220,7 @@ router.get('/chapters/:chapterId/edit', ensureLoggedIn, requireEducator, async (
         res.render('editchapter', { user: req.user, chapter, csrfToken: req.csrfToken() });
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -231,10 +231,10 @@ router.post('/chapters/:chapterId/edit', ensureLoggedIn, requireEducator, async 
         chapter.description = req.body.description;
         await chapter.save();
         req.flash('success', 'Chapter updated!');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -243,10 +243,10 @@ router.post('/chapters/:chapterId/delete', ensureLoggedIn, requireEducator, asyn
         const { chapter, course } = await loadChapterForEducator(req.params.chapterId, req.user.id);
         await chapter.destroy();
         req.flash('success', 'Chapter deleted!');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -267,7 +267,7 @@ router.get('/addpages', ensureLoggedIn, requireEducator, async (req, res) => {
         });
     } catch (error) {
         req.flash('error', 'Missing or invalid course.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -334,7 +334,7 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
         });
     } catch (error) {
         req.flash('error', 'Could not load page.');
-        res.redirect('back');
+        return res.redirect('back');
     }
 });
 
@@ -343,10 +343,10 @@ router.post('/pages/:pageId/complete', ensureLoggedIn, async (req, res) => {
         const { pageId } = req.params;
         await Completions.findOrCreate({ where: { userId: req.user.id, pageId } });
         req.flash('success', 'Page marked as complete!');
-        res.redirect(`/pages/${pageId}`);
+        return res.redirect(`/pages/${pageId}`);
     } catch (error) {
         req.flash('error', 'Could not mark as complete.');
-        res.redirect(`/pages/${req.params.pageId}`);
+        return res.redirect(`/pages/${req.params.pageId}`);
     }
 });
 
@@ -356,7 +356,7 @@ router.get('/pages/:pageId/edit', ensureLoggedIn, requireEducator, async (req, r
         res.render('editpage', { user: req.user, page, chapter, csrfToken: req.csrfToken() });
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -367,10 +367,10 @@ router.post('/pages/:pageId/edit', ensureLoggedIn, requireEducator, async (req, 
         page.content = req.body.content;
         await page.save();
         req.flash('success', 'Page updated!');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -379,10 +379,10 @@ router.post('/pages/:pageId/delete', ensureLoggedIn, requireEducator, async (req
         const { page, course } = await loadPageForEducator(req.params.pageId, req.user.id);
         await page.destroy();
         req.flash('success', 'Page deleted!');
-        res.redirect(`/courses/${course.id}`);
+        return res.redirect(`/courses/${course.id}`);
     } catch (error) {
         req.flash('error', error.message || 'Unauthorized');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -394,10 +394,10 @@ router.post('/enroll/:courseId', ensureLoggedIn, async (req, res) => {
             where: { userId: req.user.id, courseId: req.params.courseId },
         });
         req.flash(created ? 'success' : 'info', created ? 'Enrolled successfully!' : 'You are already enrolled in this course.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     } catch (error) {
         req.flash('error', 'Could not enroll in course.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -418,7 +418,7 @@ router.post('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, as
         answer: req.body.answer,
     });
     req.flash('success', 'Quiz question added!');
-    res.redirect(`/chapters/${req.params.chapterId}/quiz/edit`);
+    return res.redirect(`/chapters/${req.params.chapterId}/quiz/edit`);
 });
 
 router.post('/quizquestion/:id/delete', ensureLoggedIn, requireEducator, async (req, res) => {
@@ -430,7 +430,7 @@ router.post('/quizquestion/:id/delete', ensureLoggedIn, requireEducator, async (
         return res.redirect(`/chapters/${chapterId}/quiz/edit`);
     }
     req.flash('error', 'Question not found.');
-    res.redirect('/dashboard');
+    return res.redirect('/dashboard');
 });
 
 router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
@@ -468,7 +468,7 @@ router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
         });
     } catch (error) {
         req.flash('error', 'Could not load quiz.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -519,10 +519,10 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             );
         }
 
-        res.redirect(`/chapters/${chapterId}/quiz`);
+        return res.redirect(`/chapters/${chapterId}/quiz`);
     } catch (error) {
         req.flash('error', 'Could not submit quiz.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -544,7 +544,7 @@ router.get('/chapters/:chapterId/quiz/edit', ensureLoggedIn, requireEducator, as
         });
     } catch (error) {
         req.flash('error', 'Could not load quiz editor.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 
@@ -562,7 +562,7 @@ router.get('/reports', ensureLoggedIn, requireEducator, async (req, res) => {
         res.render('reports', { user: req.user, reports, csrfToken: req.csrfToken() });
     } catch (error) {
         req.flash('error', 'Could not load reports.');
-        res.redirect('/dashboard');
+        return res.redirect('/dashboard');
     }
 });
 

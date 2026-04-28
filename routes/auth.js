@@ -15,15 +15,22 @@ const saltRounds = 10;
 // Rate limiter for authentication endpoints (signup and signin)
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20,
+    max: process.env.NODE_ENV === 'test' ? 1000 : 20,
     standardHeaders: true,
     legacyHeaders: false,
     message: 'Too many attempts from this IP, please try again after 15 minutes.',
-    skip: () => process.env.NODE_ENV === 'test',
+});
+
+// Rate limiter for the home route (light)
+const homeLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: process.env.NODE_ENV === 'test' ? 1000 : 200,
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
 // Home
-router.get('/', (req, res) => {
+router.get('/', homeLimiter, (req, res) => {
     if (req.isAuthenticated && req.isAuthenticated()) return res.redirect('/dashboard');
     res.render('index');
 });
