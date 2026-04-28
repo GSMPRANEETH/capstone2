@@ -7,7 +7,8 @@ const { Enrollments, Courses } = require('../models');
  */
 function requireEducator(req, res, next) {
     if (req.user && req.user.role === 'educator') return next();
-    return res.status(401).json({ message: 'Unauthorized user.' });
+    req.flash('error', 'Unauthorized user.');
+    return res.redirect('/signin');
 }
 
 /**

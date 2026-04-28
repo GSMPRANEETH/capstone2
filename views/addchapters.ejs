@@ -18,10 +18,10 @@
         <input type="text" id="chapterName" name="chapterName" required class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400" />
       </div>
       <div>
-        <label for="courseName" class="block text-gray-700 font-medium mb-1">Select course:</label>
-        <select id="courseName" name="courseName" required class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <label for="courseId" class="block text-gray-700 font-medium mb-1">Select course:</label>
+        <select id="courseId" name="courseId" required class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400">
           <% for (let course of myCourses) { %>
-            <option value="<%= course.name %>"><%= course.name %></option>
+            <option value="<%= course.id %>"><%= course.name %></option>
           <% } %>
         </select>
       </div>

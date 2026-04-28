@@ -10,7 +10,7 @@
 		"start:prod": "node index.js",
 		"start": "node index.js",
 		"prepare": "husky install",
-		"test": "NODE_ENV=test jest"
+		"test": "NODE_ENV=test COOKIE_SECRET=test-secret jest"
 	},
 	"dependencies": {
 		"bcrypt": "^6.0.0",

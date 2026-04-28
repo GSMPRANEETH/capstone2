@@ -14,6 +14,13 @@ const csrf = require('csurf');
 
 const { User } = require('./models');
 
+// ─── Environment Variable Validation ─────────────────────────────────────────
+
+if (!process.env.COOKIE_SECRET) {
+    console.error('FATAL ERROR: COOKIE_SECRET environment variable is not set.');
+    process.exit(1);
+}
+
 // ─── View Engine ─────────────────────────────────────────────────────────────
 
 app.set('view engine', 'ejs');
@@ -24,14 +31,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser('shh, some secret string!'));
+app.use(cookieParser(process.env.COOKIE_SECRET));
 app.use(csrf({ cookie: true }));
 
 // ─── Session ─────────────────────────────────────────────────────────────────
 
 app.use(
     session({
-        secret: 'shh, some secret string!',
+        secret: process.env.COOKIE_SECRET,
         resave: false,
         saveUninitialized: false,
         cookie: { maxAge: 24 * 60 * 60 * 1000 },

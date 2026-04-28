@@ -50,12 +50,15 @@ router.post('/signup', authLimiter, async (req, res) => {
             return res.redirect('/signup');
         }
 
+        const allowedRoles = ['student', 'educator'];
+        const role = allowedRoles.includes(req.body.role) ? req.body.role : 'student';
+
         const hashedPassword = await bcrypt.hash(password, saltRounds);
         const user = await User.create({
             firstName: req.body.firstName,
             lastName: req.body.lastName,
             email: req.body.email,
-            role: req.body.role,
+            role: role,
             password: hashedPassword,
         });
         // Auto-login after signup
@@ -97,10 +100,20 @@ router.get('/dashboard', connectEnsureLogin.ensureLoggedIn('/signin'), async (re
             attributes: ['courseId'],
         });
         const enrolledCourseIds = enrolledRows.map((row) => row.courseId);
-        const enrolledCourses = await Courses.findAll({ where: { id: enrolledCourseIds } });
-        const availableCourses = await Courses.findAll({
-            where: { id: { [Op.notIn]: enrolledCourseIds } },
-        });
+
+        let enrolledCourses;
+        let availableCourses;
+
+        if (enrolledCourseIds.length === 0) {
+            enrolledCourses = [];
+            availableCourses = await Courses.findAll();
+        } else {
+            enrolledCourses = await Courses.findAll({ where: { id: enrolledCourseIds } });
+            availableCourses = await Courses.findAll({
+                where: { id: { [Op.notIn]: enrolledCourseIds } },
+            });
+        }
+
         res.render('dashboard', {
             user: req.user,
             csrfToken: req.csrfToken(),
@@ -114,7 +127,7 @@ router.get('/dashboard', connectEnsureLogin.ensureLoggedIn('/signin'), async (re
 });
 
 // Sign out
-router.get('/signout', (req, res, next) => {
+router.post('/signout', (req, res, next) => {
     req.logout((err) => {
         if (err) {
             req.flash('error', 'Sign out failed.');
@@ -135,6 +148,10 @@ router.post('/update-password', connectEnsureLogin.ensureLoggedIn('/signin'), as
     try {
         const { oldPassword, newPassword } = req.body;
         const user = await User.findByPk(req.user.id);
+        if (!user) {
+            req.flash('error', 'User not found');
+            return res.redirect('/signin');
+        }
         const valid = await bcrypt.compare(oldPassword, user.password);
         if (!valid) {
             req.flash('error', 'Old password incorrect');

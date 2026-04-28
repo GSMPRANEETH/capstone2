@@ -10,6 +10,17 @@ const ensureLoggedIn = connectEnsureLogin.ensureLoggedIn('/signin');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
 async function getEducatorCourses(userId) {
     return Courses.findAll({ where: { creatorId: userId } });
 }
@@ -199,8 +210,16 @@ router.get('/addchapters', ensureLoggedIn, requireEducator, async (req, res) => 
 
 router.post('/addchapters', ensureLoggedIn, requireEducator, async (req, res) => {
     try {
-        const course = await Courses.findOne({ where: { name: req.body.courseName } });
-        if (!course) throw new Error('Course not found');
+        const course = await Courses.findOne({
+            where: {
+                id: req.body.courseId,
+                creatorId: req.user.id
+            }
+        });
+        if (!course) {
+            req.flash('error', 'Course not found or unauthorized');
+            return res.redirect('/addchapters');
+        }
         await Chapters.create({
             name: req.body.chapterName,
             description: req.body.description,
@@ -255,6 +274,13 @@ router.post('/chapters/:chapterId/delete', ensureLoggedIn, requireEducator, asyn
 router.get('/addpages', ensureLoggedIn, requireEducator, async (req, res) => {
     try {
         const courseId = req.query.courseId;
+        const course = await Courses.findOne({
+            where: { id: courseId, creatorId: req.user.id }
+        });
+        if (!course) {
+            req.flash('error', 'Course not found or unauthorized');
+            return res.redirect('/dashboard');
+        }
         const myChapters = await Chapters.findAll({
             where: { courseId },
             include: [{ model: Pages }],
@@ -276,6 +302,20 @@ router.post('/addpages', ensureLoggedIn, requireEducator, async (req, res) => {
         const { courseId, chapterId, title, content } = req.body;
         if (!courseId || !chapterId || !title || !content) {
             throw new Error('Missing required fields');
+        }
+        const course = await Courses.findOne({
+            where: { id: courseId, creatorId: req.user.id }
+        });
+        if (!course) {
+            req.flash('error', 'Course not found or unauthorized');
+            return res.redirect('/dashboard');
+        }
+        const chapter = await Chapters.findOne({
+            where: { id: chapterId, courseId: courseId }
+        });
+        if (!chapter) {
+            req.flash('error', 'Chapter not found or does not belong to this course');
+            return res.redirect(`/addpages?courseId=${courseId}`);
         }
         await Pages.create({ title, content, chapterId });
         req.flash('success', 'Page created successfully.');
@@ -341,6 +381,25 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
 router.post('/pages/:pageId/complete', ensureLoggedIn, async (req, res) => {
     try {
         const { pageId } = req.params;
+        const page = await Pages.findByPk(pageId, {
+            include: [{ model: Chapters }]
+        });
+        if (!page) {
+            req.flash('error', 'Page not found');
+            return res.redirect('/dashboard');
+        }
+        const chapter = page.Chapter;
+        const course = await Courses.findByPk(chapter.courseId);
+        const enrollment = await Enrollments.findOne({
+            where: {
+                userId: req.user.id,
+                courseId: course.id
+            }
+        });
+        if (!enrollment || req.user.role !== 'student') {
+            req.flash('error', 'You must be enrolled in this course to mark pages as complete');
+            return res.redirect(`/pages/${pageId}`);
+        }
         await Completions.findOrCreate({ where: { userId: req.user.id, pageId } });
         req.flash('success', 'Page marked as complete!');
         return res.redirect(`/pages/${pageId}`);
@@ -403,34 +462,79 @@ router.post('/enroll/:courseId', ensureLoggedIn, async (req, res) => {
 
 // ─── Quiz ─────────────────────────────────────────────────────────────────────
 
-router.get('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, (req, res) => {
-    res.render('addquizquestion', {
-        chapterId: req.params.chapterId,
-        csrfToken: req.csrfToken(),
-        user: req.user,
-    });
+router.get('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, async (req, res) => {
+    try {
+        const chapter = await Chapters.findByPk(req.params.chapterId);
+        if (!chapter) {
+            req.flash('error', 'Chapter not found');
+            return res.redirect('/dashboard');
+        }
+        const course = await Courses.findByPk(chapter.courseId);
+        if (!course || course.creatorId !== req.user.id) {
+            req.flash('error', 'Unauthorized');
+            return res.redirect('/dashboard');
+        }
+        res.render('addquizquestion', {
+            chapterId: req.params.chapterId,
+            csrfToken: req.csrfToken(),
+            user: req.user,
+        });
+    } catch (error) {
+        req.flash('error', 'Could not load quiz form');
+        return res.redirect('/dashboard');
+    }
 });
 
 router.post('/chapters/:chapterId/quiz/add', ensureLoggedIn, requireEducator, async (req, res) => {
-    await QuizQuestion.create({
-        chapterId: req.params.chapterId,
-        question: req.body.question,
-        answer: req.body.answer,
-    });
-    req.flash('success', 'Quiz question added!');
-    return res.redirect(`/chapters/${req.params.chapterId}/quiz/edit`);
+    try {
+        const chapter = await Chapters.findByPk(req.params.chapterId);
+        if (!chapter) {
+            req.flash('error', 'Chapter not found');
+            return res.redirect('/dashboard');
+        }
+        const course = await Courses.findByPk(chapter.courseId);
+        if (!course || course.creatorId !== req.user.id) {
+            req.flash('error', 'Unauthorized');
+            return res.redirect('/dashboard');
+        }
+        await QuizQuestion.create({
+            chapterId: req.params.chapterId,
+            question: req.body.question,
+            answer: req.body.answer,
+        });
+        req.flash('success', 'Quiz question added!');
+        return res.redirect(`/chapters/${req.params.chapterId}/quiz/edit`);
+    } catch (error) {
+        req.flash('error', 'Could not add quiz question');
+        return res.redirect('/dashboard');
+    }
 });
 
 router.post('/quizquestion/:id/delete', ensureLoggedIn, requireEducator, async (req, res) => {
-    const qq = await QuizQuestion.findByPk(req.params.id);
-    if (qq) {
+    try {
+        const qq = await QuizQuestion.findByPk(req.params.id);
+        if (!qq) {
+            req.flash('error', 'Question not found.');
+            return res.redirect('/dashboard');
+        }
         const chapterId = qq.chapterId;
+        const chapter = await Chapters.findByPk(chapterId);
+        if (!chapter) {
+            req.flash('error', 'Chapter not found');
+            return res.redirect('/dashboard');
+        }
+        const course = await Courses.findByPk(chapter.courseId);
+        if (!course || course.creatorId !== req.user.id) {
+            req.flash('error', 'Unauthorized');
+            return res.redirect('/dashboard');
+        }
         await qq.destroy();
         req.flash('success', 'Quiz question deleted!');
         return res.redirect(`/chapters/${chapterId}/quiz/edit`);
+    } catch (error) {
+        req.flash('error', 'Could not delete quiz question');
+        return res.redirect('/dashboard');
     }
-    req.flash('error', 'Question not found.');
-    return res.redirect('/dashboard');
 });
 
 router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
@@ -442,6 +546,21 @@ router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             return res.redirect('/dashboard');
         }
         const courseId = chapter.courseId;
+        const course = await Courses.findByPk(courseId);
+        if (!course) {
+            req.flash('error', 'Course not found.');
+            return res.redirect('/dashboard');
+        }
+
+        const isOwner = req.user.id === course.creatorId;
+        const enrollment = await Enrollments.findOne({
+            where: { userId: req.user.id, courseId }
+        });
+        if (!isOwner && !enrollment) {
+            req.flash('error', 'Unauthorized: You must be enrolled in this course');
+            return res.redirect('/dashboard');
+        }
+
         const questions = await QuizQuestion.findAll({ where: { chapterId } });
         if (!questions.length) {
             req.flash('info', 'No quiz for this chapter.');
@@ -476,6 +595,28 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
     try {
         const chapterId = req.params.chapterId;
         const userId = req.user.id;
+
+        const chapter = await Chapters.findByPk(chapterId);
+        if (!chapter) {
+            req.flash('error', 'Chapter not found.');
+            return res.redirect('/dashboard');
+        }
+        const courseId = chapter.courseId;
+        const course = await Courses.findByPk(courseId);
+        if (!course) {
+            req.flash('error', 'Course not found.');
+            return res.redirect('/dashboard');
+        }
+
+        const isOwner = req.user.id === course.creatorId;
+        const enrollment = await Enrollments.findOne({
+            where: { userId: req.user.id, courseId }
+        });
+        if (!isOwner && !enrollment) {
+            req.flash('error', 'Unauthorized: You must be enrolled in this course');
+            return res.redirect('/dashboard');
+        }
+
         const questions = await QuizQuestion.findAll({ where: { chapterId } });
 
         let [attempt] = await QuizAttempt.findOrCreate({
@@ -509,7 +650,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             req.flash('success', `Quiz submitted! All answers correct! Your score: ${score}/${questions.length}`);
         } else if (attempt.attempts >= 3) {
             const answerList = wrongAnswers
-                .map((w) => `<li><strong>${w.question}</strong>: ${w.correct}</li>`)
+                .map((w) => `<li><strong>${escapeHtml(w.question)}</strong>: ${escapeHtml(w.correct)}</li>`)
                 .join('');
             req.flash('error', `You have reached 3 attempts. Correct answers:<ul>${answerList}</ul>`);
         } else {
