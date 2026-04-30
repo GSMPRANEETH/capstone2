@@ -47,6 +47,12 @@
         <a href="/pages/<%= nextPage.id %>" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-medium">
           <%= nextPage.title %> →
         </a>
+      <% } else if (hasQuiz) { %>
+        <a href="/chapters/<%= chapter.id %>/quiz" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 font-medium">
+          Take Quiz →
+        </a>
+      <% } else { %>
+        <span></span>
       <% } %>
     </div>
   </div>
