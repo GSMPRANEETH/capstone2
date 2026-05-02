@@ -358,15 +358,11 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
         });
         const pageIndex = chapterPages.findIndex((p) => p.id === page.id);
         const prevPage = pageIndex > 0 ? chapterPages[pageIndex - 1] : null;
-        let nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
+        const nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
 
-        let hasQuiz = false;
-        if (!nextPage) {
-            const quizExists = await QuizQuestion.findOne({ where: { chapterId: chapter.id } });
-            if (quizExists) {
-                hasQuiz = true;
-            }
-        }
+        const hasQuiz = !nextPage && !!(await QuizQuestion.findOne({
+            where: { chapterId: chapter.id },
+        }));
 
         res.render('page', {
             user: req.user,
