@@ -673,7 +673,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             const answerList = wrongAnswers
                 .map((w) => `<li><strong>${escapeHtml(w.question)}</strong>: ${escapeHtml(w.correct)}</li>`)
                 .join('');
-            req.flash('error', `You have reached the maximum number of attempts. The correct answer is shown below:<ul>${answerList}</ul>`);
+            req.flash('error', `You have reached the maximum number of attempts. The correct answers are shown below:<ul>${answerList}</ul>`);
         } else {
             req.flash(
                 'error',
