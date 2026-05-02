@@ -643,7 +643,10 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
         });
 
         if (attempt.attempts >= 3 || attempt.score === attempt.total) {
-            req.flash('error', 'No more attempts allowed. The correct answer is shown below.');
+            req.flash(
+                'error',
+                `No more attempts allowed. The correct ${questions.length === 1 ? 'answer is' : 'answers are'} shown below.`
+            );
             return res.redirect(`/chapters/${chapterId}/quiz`);
         }
 
