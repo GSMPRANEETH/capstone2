@@ -358,11 +358,15 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
         });
         const pageIndex = chapterPages.findIndex((p) => p.id === page.id);
         const prevPage = pageIndex > 0 ? chapterPages[pageIndex - 1] : null;
-        const nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
+        let nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
 
-        const hasQuiz = !nextPage && !!(await QuizQuestion.findOne({
-            where: { chapterId: chapter.id },
-        }));
+        let hasQuiz = false;
+        if (!nextPage) {
+            const quizExists = await QuizQuestion.findOne({ where: { chapterId: chapter.id } });
+            if (quizExists) {
+                hasQuiz = true;
+            }
+        }
 
         res.render('page', {
             user: req.user,
@@ -639,10 +643,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
         });
 
         if (attempt.attempts >= 3 || attempt.score === attempt.total) {
-            req.flash(
-                'error',
-                `No more attempts allowed. The correct ${questions.length === 1 ? 'answer is' : 'answers are'} shown below.`
-            );
+            req.flash('error', 'No more attempts allowed. The correct answer is shown below.');
             return res.redirect(`/chapters/${chapterId}/quiz`);
         }
 
@@ -669,7 +670,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             const answerList = wrongAnswers
                 .map((w) => `<li><strong>${escapeHtml(w.question)}</strong>: ${escapeHtml(w.correct)}</li>`)
                 .join('');
-            req.flash('error', `You have reached the maximum number of attempts. The correct answers are shown below:<ul>${answerList}</ul>`);
+            req.flash('error', `You have reached the maximum number of attempts. The correct answer is shown below:<ul>${answerList}</ul>`);
         } else {
             req.flash(
                 'error',
