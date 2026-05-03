@@ -358,7 +358,15 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
         });
         const pageIndex = chapterPages.findIndex((p) => p.id === page.id);
         const prevPage = pageIndex > 0 ? chapterPages[pageIndex - 1] : null;
-        const nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
+        let nextPage = pageIndex < chapterPages.length - 1 ? chapterPages[pageIndex + 1] : null;
+
+        let hasQuiz = false;
+        if (!nextPage) {
+            const quizExists = await QuizQuestion.findOne({ where: { chapterId: chapter.id } });
+            if (quizExists) {
+                hasQuiz = true;
+            }
+        }
 
         res.render('page', {
             user: req.user,
@@ -368,6 +376,7 @@ router.get('/pages/:pageId', ensureLoggedIn, async (req, res) => {
             course,
             prevPage,
             nextPage,
+            hasQuiz,
             isCompleted: !!(await Completions.findOne({
                 where: { userId: req.user.id, pageId: page.id },
             })),
@@ -575,8 +584,16 @@ router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             showAnswers = attempt.attempts >= 3 || passed;
         }
 
+        const chapterPages = await Pages.findAll({
+            where: { chapterId },
+            order: [['id', 'ASC']],
+        });
+        const prevPage = chapterPages.length > 0 ? chapterPages[chapterPages.length - 1] : null;
+
         res.render('quiz', {
             questions,
+            chapter,
+            course,
             chapterId,
             courseId,
             csrfToken: req.csrfToken(),
@@ -584,6 +601,7 @@ router.get('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             attempt,
             showAnswers,
             passed,
+            prevPage,
         });
     } catch (error) {
         req.flash('error', 'Could not load quiz.');
@@ -625,7 +643,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
         });
 
         if (attempt.attempts >= 3 || attempt.score === attempt.total) {
-            req.flash('error', 'No more attempts allowed. Correct answers are now shown.');
+            req.flash('error', 'No more attempts allowed. The correct answer is shown below.');
             return res.redirect(`/chapters/${chapterId}/quiz`);
         }
 
@@ -652,7 +670,7 @@ router.post('/chapters/:chapterId/quiz', ensureLoggedIn, async (req, res) => {
             const answerList = wrongAnswers
                 .map((w) => `<li><strong>${escapeHtml(w.question)}</strong>: ${escapeHtml(w.correct)}</li>`)
                 .join('');
-            req.flash('error', `You have reached 3 attempts. Correct answers:<ul>${answerList}</ul>`);
+            req.flash('error', `You have reached the maximum number of attempts. The correct answer is shown below:<ul>${answerList}</ul>`);
         } else {
             req.flash(
                 'error',
